@@ -1,0 +1,200 @@
+---
+title: Applications with Diego for ...
+---
+
+Diego is a replacement of the [Droplet Execution Agents](../concepts/architecture/execution-agent.html) (DEAs). If you `enable-diego` for an app, droplets staged on those DEAs will run on Diego without any other changes.
+
+There are a several differences between Diego and the DEAs, which this guide covers.
+
+This migration guide is made up of three sections:
+
+- [**Targeting Diego**](#targeting-diego) is intended for developers and describes the API calls necessary to run on Diego.
+    + [Installing the `Diego-Enabler` CLI Plugin](#installing-the-diego-enabler-cli-plugin)
+    + [Starting a new application on Diego](#starting-a-new-application-on-diego)
+    + [Transitioning an application between backends](#transitioning-an-application-between-backends)
+    + [Running route-less applications (such as workers and schedulers)](#running-route-less-applications-such-as-workers-and-schedulers)
+    + [Recognizing capacity issues](#recognizing-capacity-issues)
+
+
+- [**Diego Deltas**](#diego-deltas) describes known differences between Diego and the DEAs.
+    + [Staging Performance](#staging-performance)
+    + [Files API](#files-api)
+    + [CF-Specific Environment Variables](#cf-specific-environment-variables)
+    + [Disk Quota Over-Enforcement during Container Setup](#disk-quota-over-enforcement-during-container-setup)
+    + [Health Checks](#health-checks)
+    + [Behavior of Crashing Applications](#behavior-of-crashing-applications)
+    + [Environment Variable Interpolation](#environment-variable-interpolation)
+    + [File Permission Modes](#file-permission-modes)
+    + [Mixed Instances](#mixed-instances)
+
+## Targeting Diego
+
+App developers can ask CF to run their applications on Diego by setting the `diego` boolean field on their application to `true`. Applications with their `diego` field set to `true` will both stage and run on Diego.
+
+It is possible to modify the `diego` field on a running application. This will cause it to transition from one backend to the other immediately, although without guaranteed uptime. To ensure uptime, we recommend performing a [blue-green deployment](http://docs.cloudfoundry.org/devguide/deploy-apps/blue-green.html) in which the new, 'green' app is placed onto Diego intentionally.
+
+The following instructions assume you have the [`Diego-Enabler` CLI plugin](https://github.com/cloudfoundry-incubator/Diego-Enabler). Instructions for installing it follow.
+
+### Installing the `Diego-Enabler` CLI Plugin
+
+The [`Diego-Enabler` CLI plugin](https://github.com/cloudfoundry-incubator/Diego-Enabler) makes opting into Diego easier. It is intended for use with CF CLI v6.13.0+. Install it from the CF-Community repo as follows:
+
+```
+cf add-plugin-repo CF-Community http://plugins.cloudfoundry.org/
+cf install-plugin Diego-Enabler -r CF-Community
+```
+
+For CF CLI versions older than v6.13.0, install the [`Diego-Beta` plugin](https://github.com/cloudfoundry-incubator/diego-cli-plugin) instead.
+
+
+The `Diego-Enabler` (and `Diego-Beta`) plugin includes subcommands to `enable-diego` and `disable-diego` for an app. You can also check on whether an application has opted into Diego via `has-diego-enabled`. There is also support around modifying the application's health check with `set-health-check` and `get-health-check`.
+
+### Starting a new application on Diego
+
+To start a new application on Diego you must push the application *without starting it*. Once the app is created, you can set the `diego` boolean on it and *then* start it.
+
+1. Push the application without starting it:
+
+    ```
+    cf push APPLICATION_NAME --no-start
+    ```
+
+2. Set the `diego` boolean:
+
+    ```
+    cf enable-diego APPLICATION_NAME
+    ```
+
+    This is equivalent to running `cf curl /v2/apps/$(cf app APPLICATION_NAME --guid) -X PUT -d '{"diego":true}'`
+
+3. Start the application:
+
+    ```
+    cf start APPLICATION_NAME
+    ```
+
+### Transitioning an application between backends
+
+Simply setting the `diego` boolean via
+
+```
+cf enable-diego APPLICATION_NAME
+```
+
+will cause an existing application to transition to Diego.  The application will immediately start running on Diego and will *eventually* stop running on the DEAs. While this gives some safety, there are no strong guarantees around uptime.
+
+If you want to ensure uptime we recommend performing a blue-green deploy (that is, push a copy of your application to Diego, then swap routes and scale down the DEA application).
+
+
+To transition back to the DEAs, run
+
+```
+cf disable-diego APPLICATION_NAME
+```
+
+To tell which backend the application is targeting, run
+
+```
+cf has-diego-enabled APPLICATION_NAME
+```
+
+### Running route-less applications (such as workers and schedulers)
+
+For the DEA backend, `cf push APP_NAME --no-route` does two things:
+
+- it skips creating and binding a route for the application
+- it (indirectly) causes the DEAs to skip the port health-check on application startup
+
+> By default, when starting an application the DEAs wait until the application is listening on its assigned port *before* marking it as ready to receive traffic. To determine whether or not to perform this check, the DEA inspects the routes bound to the application and determines: if they're present the port check is performed. If they're empty, no port check is performed.
+
+Diego configures its health checks [differently from the DEAs](#health-checks). With Diego, `cf push APP_NAME --no-route` only skips creating and binding a route for the application. It does not tell Diego which type of health check to perform.
+
+By default, Diego does the same port-based health check that the DEA performs. If your application does *not* listen on a port (for example, if you are pushing a resque worker), then Diego will never see the application come up and will eventually mark it as crashed. In these cases you must tell Diego to perform no health check:
+
+```
+cf set-health-check APPLICATION_NAME none
+```
+
+Note: the two valid values for the health check are currently `port` and `none`, with `port` the default. You can get the current health check for your application via
+
+```
+cf get-health-check APPLICATION_NAME
+```
+
+
+### Recognizing capacity issues
+
+The Cloud Controller is responsible for scheduling applications on the DEAs. With Diego this responsibility shifts entirely to Diego. As a result, the Cloud Controller does not know, ahead of time, whether or not there is capacity to stage or to run the application. Instead, this information (referred to as a *placement error*) is available *asynchronously* and comes from Diego via the `cf app` API.
+
+The CLI has already been updated to:
+
+- display placement error information when `cf app` is invoked
+- inform users when staging fails because of a placement error
+- inform users when `cf push` fails because the application cannot be placed
+
+> Currently, `cf apps` is misleading. It will show all instances as healthy even if some of them have a placement error. We intend to address this soon.
+
+<!-- From here to end of doc halfway decently given the once over -->
+
+### Staging Performance
+The default behavior for Diego to handle staging is to copy all buildpacks into each container. Pivotal recommends optimizing staging performance with Diego to fetch and copy only the appropriate buildpack for the application via the `-b` flag on `cf push`:
+
+<pre class="terminal">
+$ cf push my-app -b ruby_buildpack --no-start
+$ cf enable-diego my-app
+$ cf start
+</pre>
+
+### Files API
+
+ <p class="note"><strong>Note</strong>: Diego does not support the `cf files` API.</p>
+
+### CF-Specific Environment Variables
+
+Cloud Foundry supplies certain environment variables to app instances running on the DEAs, as documented [here](../devguide/deploy-apps/environment-variable.html). These environment variables differ slightly for app instances running on Diego.
+
+- VCAP_APPLICATION
+
+    There are a few entries in the `VCAP_APPLICATION` payload that are not provided on Diego:
+
+    - `users`: This value is set to `null`.
+    - `started_at_timestamp` and `state_timestamp`: Time at which the instance is considered started, in Unix epoch time format.
+    - `started_at` and `start`: Same as `started_at_timestamp`, but in human-readable format.
+
+- VCAP\_APP\_PORT
+
+    The `VCAP_APP_PORT` environment variable is deprecated. Apps now use `PORT` or `CF_INSTANCE_PORT`.
+
+- VCAP_APP\_HOST
+
+    Pivotal recommends against using the `VCAP_APP_HOST` environment variable, as it does not provide relevant information for the app instance. The DEAs set this environment variable to `0.0.0.0` in all cases, and users cannot set any environment variable prefixed with `VCAP_`. 
+
+### Disk Quota Over-Enforcement during Container Setup
+
+When copying a droplet, a buildpack, or other assets into a container, the Garden-Linux backend can over-report the amount of disk used in that container. If this disk usage exceeds the quota allocated to the container, the container will crash with the crash event error "Copying into the container failed".
+
+Pivotal recommends that application developers increase the amount of disk allocated to their application instances twice the size of the unpacked application droplet. Droplet size can be determined by the disk usage reported when running on the DEAs.
+
+
+### Health Checks
+
+Diego and the DEAs both support a port-based health check. Applications with no associated routes are not health-checked. For this reason, Pivotal recommends that app developers disable the health check for applications that do not listen on a port.
+
+
+### File Permission Modes
+
+Diego, the Cloud Controller and CF CLI preserve the permission modes of the CF user's files during `cf push`, while the DEAs set all permission modes for application files to `0744` when staging and running apps. The buildpack for each app will attempt to construct or supply the executable file with the correct permissions.
+
+<p class="note"><strong>Note</strong>: If your application depends on the permissions modes of its other files, the permission modes should be set correctly on the local files before they are pushed.</p>
+
+<p class="note"><strong>Note</strong>: If you push a pre-built binary or other executable artifact and specify the start command to run it directly, you must set the execute bit on the executable artifact. </p>
+
+<p class="note"><strong>Note</strong>: If you push an app from a Windows workstation, the CF CLI will not specify the permission modes, and they will default to `0744`.</p>
+
+ 
+### Mixed Instances
+
+Diego allows only modifications to routes and the number of instances without restarting an application. With DEAs, it is possible to create instances that are configured differently from other instances of an application, including changes to environment variables, start commands, and bound services. Diego does not orchestrate restarts, you must bring up new instances and bring down old instances.
+
+Pivotal recommends using a green-blue deploy strategy when modifying anything about a running application. If you require some instances of an application to have different configuration than other instances, stage and deploy two different applications.
+
