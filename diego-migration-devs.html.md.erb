@@ -29,11 +29,11 @@ This migration guide is made up of three sections:
 
 ## Targeting Diego
 
-App developers can ask CF to run their applications on Diego by setting the `diego` boolean field on their application to `true`. Applications with their `diego` field set to `true` will both stage and run on Diego.
+App developers can set their CF applications to run on Diego with the `diego` boolean field. Applications with the `diego` field set to `true` will both stage and run on Diego.
 
-It is possible to modify the `diego` field on a running application. This will cause it to transition from one backend to the other immediately, although without guaranteed uptime. To ensure uptime, we recommend performing a [blue-green deployment](http://docs.cloudfoundry.org/devguide/deploy-apps/blue-green.html) in which the new, 'green' app is placed onto Diego intentionally.
+It is possible to modify the `diego` field on a running application which will cause it to transition from one backend to the other immediately,  without guaranteed uptime. To ensure uptime, Pivotal recommends performing a [blue-green deployment](http://docs.cloudfoundry.org/devguide/deploy-apps/blue-green.html) in which the new, 'green' app is placed onto Diego.
 
-The following instructions assume you have the [`Diego-Enabler` CLI plugin](https://github.com/cloudfoundry-incubator/Diego-Enabler). Instructions for installing it follow.
+The following instructions require the [`Diego-Enabler` CLI plugin](https://github.com/cloudfoundry-incubator/Diego-Enabler). Instructions for installing it follow.
 
 ### Installing the `Diego-Enabler` CLI Plugin
 
@@ -173,7 +173,7 @@ Cloud Foundry supplies certain environment variables to app instances running on
 
 When copying a droplet, a buildpack, or other assets into a container, the Garden-Linux backend can over-report the amount of disk used in that container. If this disk usage exceeds the quota allocated to the container, the container will crash with the crash event error "Copying into the container failed".
 
-Pivotal recommends that application developers increase the amount of disk allocated to their application instances twice the size of the unpacked application droplet. Droplet size can be determined by the disk usage reported when running on the DEAs.
+Pivotal recommends that application developers increase the amount of disk allocated to their application instances by two times the size of the unpacked application droplet. Droplet size can be determined by the disk usage reported when apps run on the DEAs.
 
 
 ### Health Checks
