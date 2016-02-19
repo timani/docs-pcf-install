@@ -8,7 +8,7 @@ title: Restoring Pivotal Cloud Foundry&reg; from Backup
 
 This topic describes the procedure for restoring <%= vars.product_full %> from a backup. To create a backup, see the [Backing Up Pivotal Cloud Foundry&reg;](./backup-pcf.html) topic.
 
-To restore a deployment, you must import installation settings, temporarily stop the Cloud Controller, restore the state of each critical backend component from its backup file, and restart the Cloud Controller. Using the BOSH manifest to locate your critical backend components is necessary to perform these steps. Manifests are automatically downloaded to the Ops Manager virtual machine. However, if you are using a separate jumpbox, you must manually download the BOSH deployment manifest.
+Pivotal Cloud Foundry restarts virtual machines (VMs) automatically. However, there are two VMs, PCF Ops Manager and Bosh Director VM, which will not automatically restart. This procedure outlines how to manually restart the PCF Ops Manager, the Bosh Director VM, and restore the state of each critical component which make up your deployment. 
 
 <p class='note'><strong>Note</strong>:
 The procedure described in this topic restores a running <%= vars.product_full %> deployment to the state captured by backup files. This procedure does not deploy <%= vars.product_full %>. See the
@@ -39,9 +39,45 @@ If the admin password has not changed, skip this step.
 
 1. Return to the Product Installation Dashboard and click Apply Changes to install the imported installation settings.
 
-## <a id='manifest'></a> (Optional) Download the BOSH Deployment Manifest ##
+## <a id='bosh'></a> Restore the BOSH Director VM ##
 
-<p class="note"><strong>Note</strong>: You only need to download the BOSH deployment manifest manually if you are using a separate jumpbox.</p>
+<p class='note'><strong>Note</strong>: This procedure assumes you are using an external Database like MySQL on AWS-RDS and an external blobstore like AWS-S3. If you are not, follow the <a href ="#manual-bosh" instructions/> below to restore BOSH's internal database and blobstore.</p> 
+
+### <a id='bosh-ops'></a>Restoring BOSH Using Ops Manager###
+
+1. Go into Ops Manager and select Director Config. 
+
+1. Select NTP Servers, and delete one of them. Select save. 
+
+1. SSH into the Ops Manager
+
+1. Find and remove `/var/tempest/workspaces/default/deployments/bosh-deployments.yml` file
+
+1. Go back into the installation dashboard, and click apply changes.
+
+### Manually restoring BOSH ###
+
+#### Steps to Backup Bosh's Internal Database and Blobstore ####
+
+1. SSH into bosh via `ssh -i key vcap@boship`.
+
+1. In a terminal window, obtain root access by entering `su` (find vm credentials from Ops man credentials -> Ops Man Director / vcap/creds). When prompted, enter your password.
+
+1. In a terminal window, run `monit summary` to view all BOSH processes.
+
+1. Run `monit stop all` to stop all Bosh processes.
+
+1. Take a snapshot in AWS of the Bosh persistent disk volume.
+
+### <a id='manual-bosh'></a>Steps to Restore BOSH’s Internal DB and Blobstore ####
+
+1. Rebuild BOSH as described above (it will have created a new EMPTY persistent disk).
+1  Repeat above backup steps 1-4, you will need to stop all processes before detaching the persistent disk.
+1. Detach the persistent disk (deleting it).
+1. Create a new volume from the snapshot and then manually attach the new volume to the BOSH VM.
+1. Starts all processes again. BOSH will now have the same bosh uuid (because it’s stored in the database).
+
+## <a id='manifest'></a> (Optional) Download the BOSH Deployment Manifest ##
 
 <%= partial 'download_bosh_manifest' %>
 

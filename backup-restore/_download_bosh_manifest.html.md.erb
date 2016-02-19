@@ -1,5 +1,7 @@
 <% if $this_topic == 'restore-pcf' || $this_topic == 'backup-pcf' %>
 
+<p class='note'><strong>Note</strong>: Manifests are automatically downloaded to the Ops Manager virtual machine. However, if you are using a separate jumpbox, you must manually download the BOSH deployment manifest.</p>
+
 1. Install Ruby and the [BOSH CLI Ruby gem](http://docs.cloudfoundry.org/bosh/bosh-cli.html) on a machine outside of your PCF deployment.
 
 1. From the Installation Dashboard in Ops Manager, select **Ops Manager Director > Status** and record the IP address listed for the Ops Manager Director.
