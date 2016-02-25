@@ -1,57 +1,55 @@
 ---
-title: Using SAML to access Ops Manager and BOSH
+title: Using SAML to access Ops Manager
 ---
 
-This guide will explore how to integrate PCF Ops Manager and BOSH with a SAML server. As an example we will use the the PHP Simple SAML Server.
+This procedure describes how to integrate PCF Ops Manager using the PHP Simple SAML Server as an example.
 
 ## <a id='requirements'></a>Requirements
 
-* Deploy an Ops Manager. Refer to the [Using Operations Manager](../customizing/index.html) topic to deploy an Ops Manager VM to your infrastructure. Make note of the IP address as we will need it in the next section.
+Deploy an Ops Manager. Refer to the [Using Operations Manager](../customizing/index.html) topic to deploy an Ops Manager VM to your infrastructure. Make note of the IP address as we will need it in the next section.
 
 ## <a id='example-saml-server'></a>Setting up an Example SAML Server
 
-Clone the forked PHP Simple SAML Server, change directories, and push the app
-
 1. Clone the Simple SAML PHP Github repo. 
-<pre class='terminal'> 
-    $ git clone https://github.com/pivotal-cf-experimental/simplesamlphp-for-cf
-</pre>
-
-1. In the directory where you cloned the Simple SAML PHP repo, push the example app.
 <pre class='terminal'>
-$ ./deploy_new_saml_server.rb
+$ git clone <span>https</span>://github.com/pivotal-cf-experimental/simplesamlphp-for-cf
 </pre>
 
-1. When prompted about your configuration, enter the following:
+1. In the directory where you cloned the Simple SAML PHP repo, run the following:
+<pre class='terminal'>
+$ ./deploy\_new\_saml_server.rb
+</pre>
 
-    * What IP or hostname (with https and port) would you like this SAML server to accept traffic from? Enter `https://54.173.27.115`.
-    * What IP (with https and port) will your BOSH be deployed to? Enter `https://10.0.16.11`.
-    * What name should this be pushed to PWS as? Enter `ops-manager-saml1`.
-
-<p class="note"><strong>Note</strong>: You can expect your BOSH to be deployed to the first available IP in the range you configure when you setup your networks in Ops Manager. In our example, the first network is 10.0.16.0/20, with the first 10 IPs reserved. Accordingly, BOSH will land on 10.0.16.11. Even though Ops Manager has not been set up yet, we can predict that this will be the location of the BOSH Director.</p>
+1. In the terminal window, answer the following questions regarding your configuration when prompted:
+  * What IP or hostname (with https and port) would you like this SAML server to accept traffic from?
+  * What IP (with https and port) will your BOSH be deployed to? 
+  * What name should this be pushed to PWS as? 
+<p class="note"><strong>Note</strong>: You can expect your BOSH to be deployed to the first available IP in the range you configure when you setup your networks in Ops Manager. In our example, the first network is 10.0.16.0/20, with the first 10 IPs reserved. Accordingly, BOSH will land on 10.0.16.11. Even though Ops Manager has not been set up yet, we can predict that this will be the location of the BOSH Director.
+</p> 
 
 1. Browse your SAML server and locate the URL in which the SAML metadata exists. In this PHP Simple SAML Server, the metadata is located at the URL shown below:
 
-<img src="images/saml-meta.png"/>
+    <%= image_tag("images/saml-meta.png") %>
 
-1. Open a browser and navigate to the Ops Manager IP address. Choose the first of the authentication system options.
+1. Open a browser and navigate to the Ops Manager IP address. Choose **Use an Identity Provider**.
 
-<img src="images/welcome.png"/>
+    <%= image_tag("images/welcome.png") %>
 
-1. Paste the SAML 2.0 Metadata URL into the Use an Identity Provider area, choose a passphrase. This is a shared secret to encrypt Ops Manager data at rest. Click **Setup Authentication**.
+1. Paste the SAML 2.0 Metadata URL into the Use an Identity Provider area, enter a passphrase, and click **Setup Authentication**. The passphrase you entered is a shared secret to encrypt Ops Manager data at rest.
 
-<img src="images/setup-authentication.png"/>
+    <%= image_tag("images/setup-authentication.png") %>
 
 1. When you are redirected to your SAML Server, enter the username and password of an existing user. Click **Login**.
 
-<img src="images/sign-in.png"/>
+    <%= image_tag("images/sign-in.png") %>
 
 1. You are redirected to the Ops Man dashboard, and have successfully setup an example SAML Server.
 
 ## <a id='example-saml-server'></a>Using an existing SAML Server
 
-<p class="note"><strong>Note</strong>:To use an existing SAML Server, make sure you have created corollary settings to those found in our example SAML Server metadata. The structure of these settings will vary based on the SAML server you are configuring.</p>
-<pre class='terminal'>
+To use an existing SAML Server, make sure you have created corollary settings to those found in our example SAML Server metadata. The structure of these settings will vary based on the SAML server you are configuring.
+
+```
    'AssertionConsumerService' => '#{opsman_ip}/uaa/saml/SSO/alias/opsman-login',
    'SingleLogoutService' => '#{opsman_ip}/uaa/saml/SSO/alias/opsman-login',
    'NameIDFormat' => 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
@@ -61,7 +59,7 @@ $ ./deploy_new_saml_server.rb
    'SingleLogoutService' => 'https://#{bosh_ip}:8443/saml/SSO/alias/bosh-uaa',
    'NameIDFormat' => 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
    'simplesaml.nameidattribute' => 'emailAddress',
-</pre>
+```
 
 
 
